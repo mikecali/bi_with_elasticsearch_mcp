@@ -25,6 +25,36 @@ This project provides an intelligent business data analysis system that combines
  Claude Desktop:       Claude Desktop → MCP Server → Elasticsearch
 ```
 
+##  Architecture
+
+### Components
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Web Browser   │────│   Flask Web App  │────│  Elasticsearch  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │
+                                │ (MCP Mode)
+                                ▼
+                       ┌──────────────────┐
+                       │   MCP Server     │
+                       └──────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │  Claude Desktop  │
+                       └──────────────────┘
+```
+
+### Data Flow
+
+1. **User Query** → Web interface or Claude Desktop
+2. **Processing** → Flask app or MCP server handles request
+3. **Search/Analysis** → Elasticsearch with ML inference
+4. **AI Enhancement** → Claude provides insights (optional)
+5. **Response** → Formatted results returned to user
+
+
 ##  Prerequisites
 
 ### 1. Elasticsearch Cloud Setup
@@ -121,7 +151,7 @@ Your Elasticsearch index must have this mapping structure:
 
 ### 2. Python Environment
 
-- **Python 3.8+**
+- **Python 3.10+**
 - **Virtual environment** (recommended)
 
 ### 3. Claude API Access
@@ -540,38 +570,9 @@ If you see  for inference fields, either:
 3. **Demo**: Open http://localhost:5000 and explore
 4. **Claude Integration**: Configure MCP for AI assistant access
 
-##  Architecture
-
-### Components
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Web Browser   │────│   Flask Web App  │────│  Elasticsearch  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                │ (MCP Mode)
-                                ▼
-                       ┌──────────────────┐
-                       │   MCP Server     │
-                       └──────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │  Claude Desktop  │
-                       └──────────────────┘
-```
-
-### Data Flow
-
-1. **User Query** → Web interface or Claude Desktop
-2. **Processing** → Flask app or MCP server handles request
-3. **Search/Analysis** → Elasticsearch with ML inference
-4. **AI Enhancement** → Claude provides insights (optional)
-5. **Response** → Formatted results returned to user
 
 
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **Elasticsearch** for powerful search and ML capabilities
 - **Anthropic** for Claude AI integration
