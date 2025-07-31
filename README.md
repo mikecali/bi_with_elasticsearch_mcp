@@ -11,40 +11,24 @@
 
 This project provides an intelligent business data analysis system that combines:
 
-- ** Advanced Search**: Keyword, semantic (ELSER), dense vector embeddings, and hybrid search
-- ** Analytics**: Real-time aggregations and business metrics
-- ** AI Integration**: Claude-powered Q&A and insights via MCP
-- ** Web Interface**: User-friendly dashboard for data exploration
-- ** Claude Desktop**: Direct AI assistant integration through MCP protocol
+- **Advanced Search**: Keyword, semantic (ELSER), dense vector embeddings, and hybrid search
+- **Analytics**: Real-time aggregations and business metrics
+- **AI Integration**: Claude-powered Q&A and insights via MCP
+- **Web Interface**: User-friendly dashboard for data exploration
+- **Claude Desktop**: Direct AI assistant integration through MCP protocol
 
 ### Architecture Options
 
 ```
- Direct Mode:          Browser → Flask → Elasticsearch
- MCP Mode:             Browser → Flask → MCP Server → Elasticsearch  
- Claude Desktop:       Claude Desktop → MCP Server → Elasticsearch
+Direct Mode:          Browser → Flask → Elasticsearch
+MCP Mode:             Browser → Flask → MCP Server → Elasticsearch  
+Claude Desktop:       Claude Desktop → MCP Server → Elasticsearch
 ```
-
-##  Architecture
+## Architecture
 
 ### Components
 
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Web Browser   │────│   Flask Web App  │────│  Elasticsearch  │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-                                │
-                                │ (MCP Mode)
-                                ▼
-                       ┌──────────────────┐
-                       │   MCP Server     │
-                       └──────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │  Claude Desktop  │
-                       └──────────────────┘
-```
+<img width="915" height="511" alt="Screenshot 2025-08-01 at 7 50 08 AM" src="https://github.com/user-attachments/assets/53c63beb-01af-4898-a7a5-500147526e1d" />
 
 ### Data Flow
 
@@ -53,7 +37,6 @@ This project provides an intelligent business data analysis system that combines
 3. **Search/Analysis** → Elasticsearch with ML inference
 4. **AI Enhancement** → Claude provides insights (optional)
 5. **Response** → Formatted results returned to user
-
 
 ##  Prerequisites
 
@@ -151,7 +134,7 @@ Your Elasticsearch index must have this mapping structure:
 
 ### 2. Python Environment
 
-- **Python 3.10+**
+- **Python 3.8+**
 - **Virtual environment** (recommended)
 
 ### 3. Claude API Access
@@ -221,7 +204,7 @@ LOG_LEVEL=INFO
 
 ### 5. Setup Demo Data
 
-**⚠ IMPORTANT**: You need sample data to demo the system effectively.
+** IMPORTANT**: You need sample data to demo the system effectively.
 
 #### Automated Setup (Recommended)
 
@@ -236,7 +219,7 @@ This will:
 -  Index sample data with proper structure
 -  Add AI inference processing (ELSER + E5 embeddings)
 -  Verify all search capabilities
-- Test keyword, semantic, and aggregation features
+-  Test keyword, semantic, and aggregation features
 
 #### What Sample Data is Generated
 
@@ -341,7 +324,7 @@ python mcp_server.py
 - **Protocol**: JSON-RPC over stdin/stdout
 - **Usage**: For Claude Desktop or other MCP clients
 
-##  Claude Desktop Integration
+## Claude Desktop Integration
 
 ### 1. Configure Claude Desktop
 
@@ -362,17 +345,44 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
-### 2. Example Claude Queries
+### 2. Enhanced MCP Server Features
+
+The MCP server now includes **full AI search capabilities**:
+
+| Search Type | Description | Requires |
+|-------------|-------------|----------|
+| **Keyword** | Traditional text matching | Always available |
+| **Semantic (ELSER)** | AI-powered concept understanding | ELSER model deployed |
+| **Embedding (E5)** | Dense vector similarity search | E5 model deployed |  
+| **Hybrid** | Combines keyword + semantic | Both ELSER + E5 models |
+| **Rerank** | AI-powered result reranking | Rerank model deployed |
+
+The server automatically detects which AI capabilities are available and adjusts accordingly.
+
+### 3. Example Claude Queries
 
 Once connected, you can ask Claude:
 
+**Basic Business Questions:**
 - *"What are our top 5 regions by sales revenue?"*
 - *"Show me Q4 performance trends by product category"*
 - *"Which sales rep has the highest customer conversion rate?"*
-- *"Analyze our enterprise software performance vs hardware sales"*
-- *"Find all deals over $50K in the last quarter"*
 
-##  Features
+**Semantic Search (if ELSER available):**
+- *"Find profitable enterprise solutions"* (understands concepts, not just keywords)
+- *"Show me underperforming product lines"* (semantic understanding)
+- *"Identify growth opportunities in emerging markets"* (conceptual matching)
+
+**Advanced Analytics:**
+- *"Analyze our enterprise software performance vs hardware sales"*
+- *"Compare regional performance and suggest expansion strategies"*
+- *"Find all deals over $50K in the last quarter with growth potential"*
+
+### 4. Check AI Capabilities
+
+You can ask Claude: *"What AI search capabilities are available?"* to see which features are active.
+
+## Features
 
 ### Advanced Search Types
 
@@ -399,7 +409,7 @@ Once connected, you can ask Claude:
 - **Contextual Insights** - AI-generated business recommendations
 - **Automated Reporting** - AI-summarized performance metrics
 
-##  API Endpoints
+## API Endpoints
 
 ### Web API
 
@@ -416,11 +426,12 @@ Once connected, you can ask Claude:
 
 | Tool | Description |
 |------|-------------|
-| `search_business_data` | Search with natural language queries |
-| `aggregate_business_metrics` | Perform business data aggregations |
-| `get_business_summary` | Comprehensive business overview |
+| `search_business_data` | **Enhanced search** with keyword, semantic (ELSER), embedding (E5), hybrid, and rerank options |
+| `aggregate_business_metrics` | Perform business data aggregations with time filtering |
+| `get_business_summary` | Comprehensive business overview with AI capability info |
+| `get_ai_capabilities` | **New**: Check available AI search features and inference endpoints |
 
-## 📊 Sample Data Structure
+## Sample Data Structure
 
 The following data structure is automatically generated by `python setup_data.py`:
 
@@ -449,104 +460,6 @@ The following data structure is automatically generated by `python setup_data.py
 
 **Generated by setup script**: 500 records across 10 product types, 5 regions, 8 sales reps, spanning 2023-2024, with comprehensive AI inference processing.
 
-## Troubleshooting
-
-### Common Issues
-
-#### "No results found" / Empty data
-- **Cause**: Sample data not generated or indexed properly
-- **Solution**: Run `python complete_setup_data.py` to create demo data
-- **Verify**: Check document count at http://localhost:5000/api/health
-- **Expected**: Should show ~500 documents after setup
-
-#### Data setup fails with inference errors
-- **Cause**: ELSER or E5 models not deployed in Elasticsearch
-- **Solution**: Verify inference endpoints are running in Kibana → ML → Inference
-- **Workaround**: Use `python complete_setup_data.py --skip-inference` for basic setup
-- **Fix**: Deploy missing models then re-run full setup
-
-#### Setup takes too long or times out
-- **Cause**: AI inference processing is resource-intensive
-- **Solution**: Setup processes documents in small batches automatically
-- **Alternative**: Use `--skip-inference` for faster setup without AI features
-- **Retry**: If setup fails, it can be safely re-run
-
-#### "Inference endpoint not available" errors
-- **Cause**: Required ML models not deployed or not responsive
-- **Immediate fix**: Run `python complete_setup_data.py --skip-inference`
-- **Full solution**: Deploy ELSER and E5 models in Elasticsearch, then re-run setup
-- **Impact**: Basic search and analytics still work without inference
-
-#### "Search failed" errors
-- **Cause**: Missing ML models or inference endpoints
-- **Solution**: Verify all required models are deployed in Elasticsearch
-- **Fallback**: Use keyword search while setting up ML models
-
-#### "MCP server not running"
-- **Cause**: MCP server process failed to start
-- **Solution**: Check logs in `webapp_mcp.py` output
-- **Debug**: Run `python mcp_server.py` directly to see errors
-
-#### "Claude inference failed"
-- **Cause**: Missing or misconfigured Anthropic inference endpoint
-- **Solution**: Verify `claude-completions` endpoint in Elasticsearch
-- **Workaround**: App will fall back to data analysis without Claude
-
-#### Connection timeout
-- **Cause**: Elasticsearch Cloud network issues
-- **Solution**: Check endpoint URL and API key in `.env`
-- **Verify**: Test with `/api/health` endpoint
-
-### Debug Tools
-
-```bash
-# Test complete data setup
-python complete_setup_data.py --help
-
-# Basic setup without AI (faster)
-python complete_setup_data.py --skip-inference
-
-# Test all search types
-curl -X POST http://localhost:5000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "software", "search_type": "keyword"}'
-
-# Test semantic search (if AI inference available)
-curl -X POST http://localhost:5000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "enterprise solutions", "search_type": "semantic"}'
-
-# Test aggregation
-curl -X POST http://localhost:5000/api/aggregate \
-  -H "Content-Type: application/json" \
-  -d '{"metric": "sales", "group_by": "region"}'
-
-# Health check (includes document count)
-curl http://localhost:5000/api/health
-
-# Verify inference fields are populated
-curl -X POST http://localhost:5000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "services", "search_type": "semantic", "size": 1}'
-```
-
-### Verify Data Setup Success
-
-After running `python complete_setup_data.py`, you should see:
-
-```
- Successfully indexed 500 documents
- AI inference processing completed! Processed 500 documents
- Total documents: 500
- ELSER inference populated: 
- Dense embedding populated: 
- Keyword search: X matches for 'software'
- Semantic search: Y matches for 'enterprise solutions'
-```
-
-If you see  for inference fields, either:
-1. Your ML models aren't deployed correctly, or
-2. You used `--skip-inference` (which is normal)
 
 ## 📁 Project Structure
 
@@ -554,13 +467,13 @@ If you see  for inference fields, either:
 
 | File | Purpose |
 |------|---------|
-| `complete_setup_data.py` | ** Complete data setup** - Creates index, generates sample data, adds AI inference |
+| `complete_setup_data.py` | **Complete data setup** - Creates index, generates sample data, adds AI inference |
 | `start.py` | **Interactive launcher** - Choose between different run modes |
 | `webapp.py` | **Direct mode** - Flask app with direct Elasticsearch access |
 | `webapp_mcp.py` | **MCP mode** - Flask app + MCP server integration |
-| `mcp_server.py` | **MCP server** - Standalone server for Claude Desktop integration |
+| `mcp_server.py` | **Enhanced MCP server** - Full AI search capabilities for Claude Desktop |
 | `requirements.txt` | **Dependencies** - Python package requirements |
-| `.env` | **Configuration** - Environment variables and settings |
+| `.env` | **⚙Configuration** - Environment variables and settings |
 | `templates/index.html` | **Web interface** - Modern Tailwind CSS dashboard |
 
 ### Recommended Workflow
@@ -568,15 +481,22 @@ If you see  for inference fields, either:
 1. **Setup**: `python complete_setup_data.py` (creates comprehensive demo data)
 2. **Launch**: `python start.py` (interactive menu)
 3. **Demo**: Open http://localhost:5000 and explore
-4. **Claude Integration**: Configure MCP for AI assistant access
+4. **Claude Integration**: Configure enhanced MCP server for full AI assistant access
+
+### Enhanced MCP Server
+
+The `mcp_server.py` now includes:
+-  **Auto-detection** of available AI models (ELSER, E5, Rerank)
+-  **Graceful fallbacks** when AI models aren't available
+-  **Full search types** (keyword, semantic, embedding, hybrid, rerank)
+-  **AI capability reporting** for debugging and optimization
 
 
+## Contributing
 
-## Acknowledgments
-
-- **Elasticsearch** for powerful search and ML capabilities
-- **Anthropic** for Claude AI integration
-- **Model Context Protocol** for standardized AI tool integration
-- **Flask** for the web framework
-- **Tailwind CSS** for the modern UI
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
