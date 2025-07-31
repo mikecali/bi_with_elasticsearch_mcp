@@ -1,581 +1,704 @@
 #!/usr/bin/env python3
+"""
+Enhanced MCP Server for Business Intelligence with ELSER and Semantic Search
+Supports keyword, semantic (ELSER), embedding, and hybrid search types
+"""
 
 import asyncio
 import json
+import sys
 import os
 import logging
-import subprocess
-import threading
-import time
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify
-from flask_cors import CORS
+from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-CORS(app)
-
-class MCPClient:
-    """Client to communicate with the MCP server"""
+class EnhancedBusinessIntelligenceMCPServer:
+    """Enhanced MCP Server for Business Intelligence with full AI search capabilities"""
     
     def __init__(self):
-        self.mcp_process = None
-        self.start_mcp_server()
+        """Initialize the enhanced MCP server"""
+        self.setup_elasticsearch()
+        self.check_ai_capabilities()
         
-    def start_mcp_server(self):
-        """Start the MCP server as a subprocess"""
+    def setup_elasticsearch(self):
+        """Set up Elasticsearch connection"""
         try:
-            logger.info("Starting MCP server...")
-            
-            # Path to the actual MCP server script
-            mcp_script = "mcp_server.py"
-            
-            # Check if the MCP server script exists
-            if not os.path.exists(mcp_script):
-                raise FileNotFoundError(f"MCP server script not found: {mcp_script}")
-            
-            # Start MCP server process
-            self.mcp_process = subprocess.Popen(
-                ['python', mcp_script],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                bufsize=0
-            )
-            
-            # Give it a moment to start
-            time.sleep(2)
-            
-            # Test the connection
-            test_result = self.call_mcp_tool("tools/list", {})
-            if test_result.get("tools"):
-                logger.info(f"✅ MCP server started successfully with {len(test_result['tools'])} tools")
-            else:
-                logger.error("❌ MCP server started but no tools available")
-                
-        except Exception as e:
-            logger.error(f"Failed to start MCP server: {e}")
-            self.mcp_process = None
-    
-    def call_mcp_tool(self, method, params=None):
-        """Call an MCP tool and get the response"""
-        if not self.mcp_process:
-            raise Exception("MCP server not running")
-        
-        try:
-            # Prepare JSON-RPC request
-            request_id = int(time.time() * 1000)  # Use timestamp as ID
-            rpc_request = {
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": params or {},
-                "id": request_id
+            es_config = {
+                "hosts": [os.getenv("ELASTICSEARCH_ENDPOINT")],
+                "request_timeout": 30,  # Longer timeout for inference
+                "max_retries": 2
             }
             
-            # Send request to MCP server
-            request_json = json.dumps(rpc_request) + "\n"
-            self.mcp_process.stdin.write(request_json)
-            self.mcp_process.stdin.flush()
-            
-            # Read response
-            response_line = self.mcp_process.stdout.readline()
-            if not response_line:
-                raise Exception("No response from MCP server")
-            
-            response = json.loads(response_line.strip())
-            
-            # Check for errors
-            if "error" in response:
-                raise Exception(f"MCP Error: {response['error']}")
-            
-            return response.get("result", {})
-            
-        except Exception as e:
-            logger.error(f"MCP call failed: {e}")
-            raise
-    
-    def search_business_data(self, query, search_type="keyword", size=10):
-        """Search business data via MCP"""
-        try:
-            logger.info(f"MCP Search: '{query}' (type: {search_type}, size: {size})")
-            
-            result = self.call_mcp_tool("tools/call", {
-                "name": "search_business_data",
-                "arguments": {
-                    "query": query,
-                    "search_type": search_type,
-                    "size": size
-                }
-            })
-            
-            # Parse the content from MCP response
-            if "content" in result and result["content"]:
-                content_text = result["content"][0]["text"]
-                return json.loads(content_text)
+            if os.getenv("ELASTICSEARCH_API_KEY"):
+                es_config["api_key"] = os.getenv("ELASTICSEARCH_API_KEY").strip('"')
             else:
-                raise Exception("No content in MCP response")
-                
-        except Exception as e:
-            logger.error(f"MCP search failed: {e}")
-            raise
-    
-    def aggregate_business_metrics(self, metric, group_by, time_range=None):
-        """Aggregate business metrics via MCP"""
-        try:
-            logger.info(f"MCP Aggregation: {metric} by {group_by} for {time_range}")
+                es_config["basic_auth"] = (
+                    os.getenv("ELASTICSEARCH_USERNAME", "elastic"),
+                    os.getenv("ELASTICSEARCH_PASSWORD", "changeme")
+                )
             
-            result = self.call_mcp_tool("tools/call", {
-                "name": "aggregate_business_metrics",
-                "arguments": {
-                    "metric": metric,
-                    "group_by": group_by,
-                    "time_range": time_range
-                }
-            })
+            self.es_client = Elasticsearch(**es_config)
+            self.index_name = os.getenv("ELASTICSEARCH_INDEX", "business_intelligence")
             
-            # Parse the content from MCP response
-            if "content" in result and result["content"]:
-                content_text = result["content"][0]["text"]
-                return json.loads(content_text)
-            else:
-                raise Exception("No content in MCP response")
-                
-        except Exception as e:
-            logger.error(f"MCP aggregation failed: {e}")
-            raise
-    
-    def get_business_summary(self, time_range=None):
-        """Get business summary via MCP"""
-        try:
-            logger.info(f"MCP Business Summary for {time_range}")
-            
-            result = self.call_mcp_tool("tools/call", {
-                "name": "get_business_summary",
-                "arguments": {
-                    "time_range": time_range
-                }
-            })
-            
-            # Parse the content from MCP response
-            if "content" in result and result["content"]:
-                content_text = result["content"][0]["text"]
-                return json.loads(content_text)
-            else:
-                raise Exception("No content in MCP response")
-                
-        except Exception as e:
-            logger.error(f"MCP business summary failed: {e}")
-            raise
-    
-    def ask_claude_about_data(self, question, context_data=None):
-        """Use Claude inference endpoint to answer questions about business data"""
-        try:
-            logger.info(f"Asking Claude: '{question}'")
-            
-            # For now, provide a helpful response based on context
-            if not context_data:
-                return {
-                    "answer": f"To answer '{question}', I would need to search your business data first. Try using the search function to get relevant data, then ask me to analyze it.",
-                    "suggestion": "Search for relevant data first, then ask for analysis",
-                    "needs_data": True
-                }
-            else:
-                # Analyze the context data
-                results = context_data.get('results', [])
-                total_hits = context_data.get('total_hits', 0)
-                
-                # Create a basic analysis
-                analysis_points = []
-                if results:
-                    # Analyze top results
-                    top_product = results[0].get('product_name', 'Unknown')
-                    top_sales = results[0].get('sales_amount', 0)
-                    top_region = results[0].get('region', 'Unknown')
-                    
-                    analysis_points.append(f"Found {total_hits} relevant records in your business data.")
-                    analysis_points.append(f"Top result: '{top_product}' with ${top_sales:,} in sales from {top_region}.")
-                    
-                    # Look for patterns
-                    regions = list(set([r.get('region', 'Unknown') for r in results[:5]]))
-                    categories = list(set([r.get('product_category', 'Unknown') for r in results[:5]]))
-                    
-                    if len(regions) > 1:
-                        analysis_points.append(f"Data spans multiple regions: {', '.join(regions[:3])}{'...' if len(regions) > 3 else ''}.")
-                    
-                    if len(categories) > 1:
-                        analysis_points.append(f"Multiple product categories found: {', '.join(categories[:3])}{'...' if len(categories) > 3 else ''}.")
-                    
-                    # Calculate totals
-                    total_sales = sum([r.get('sales_amount', 0) for r in results])
-                    total_orders = sum([r.get('order_count', 0) for r in results])
-                    
-                    if total_sales > 0:
-                        analysis_points.append(f"Total sales across these records: ${total_sales:,}.")
-                    if total_orders > 0:
-                        analysis_points.append(f"Total orders: {total_orders:,}.")
-                
-                return {
-                    "answer": f"Based on your question '{question}', here's what I found in your business data:\n\n" + "\n".join(analysis_points),
-                    "data_summary": f"Analyzed {len(results)} of {total_hits} matching records",
-                    "needs_data": False
-                }
-                
-        except Exception as e:
-            logger.error(f"Claude query failed: {e}")
-            raise
-    
-    def get_health_info(self):
-        """Get health information via MCP"""
-        try:
-            # Call MCP to get some basic info
-            tools_result = self.call_mcp_tool("tools/list", {})
-            
-            return {
-                "status": "healthy",
-                "mcp_server": "running",
-                "available_tools": len(tools_result.get("tools", [])),
-                "tools": [tool["name"] for tool in tools_result.get("tools", [])],
-                "claude_inference": "simulated",
-                "timestamp": datetime.now().isoformat()
+            # Inference endpoints
+            self.inference_endpoints = {
+                "elser": os.getenv("ELSER_INFERENCE_ID", ".elser-2-elasticsearch"),
+                "embedding": os.getenv("EMBEDDING_INFERENCE_ID", ".multilingual-e5-small-elasticsearch"),
+                "rerank": os.getenv("RERANK_INFERENCE_ID", ".rerank-v1-elasticsearch")
             }
+            
+            # Test connection
+            info = self.es_client.info()
+            logger.info(f"Connected to Elasticsearch {info['version']['number']}")
+            
         except Exception as e:
-            return {
-                "status": "unhealthy",
-                "mcp_server": "failed",
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            logger.error(f"Failed to connect to Elasticsearch: {e}")
+            raise
     
-    def cleanup(self):
-        """Clean up MCP server process"""
-        if self.mcp_process:
-            try:
-                self.mcp_process.terminate()
-                self.mcp_process.wait(timeout=5)
-                logger.info("MCP server terminated")
-            except:
-                self.mcp_process.kill()
-                logger.info("MCP server killed")
-
-# Global MCP client
-try:
-    mcp_client = MCPClient()
-    logger.info("MCP client initialized successfully")
-except Exception as e:
-    logger.error(f"Failed to initialize MCP client: {e}")
-    mcp_client = None
-
-@app.route('/')
-def index():
-    """Serve the main UI page"""
-    return render_template('index.html')
-
-@app.route('/api/search', methods=['POST'])
-def search_business_data():
-    """Handle search requests via MCP"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
-            
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-            
-        query = data.get('query', '')
-        search_type = data.get('search_type', 'keyword')
-        size = data.get('size', 10)
-        
-        if not query.strip():
-            return jsonify({"error": "Query cannot be empty"}), 400
-        
-        result = mcp_client.search_business_data(query, search_type, size)
-        return jsonify(result)
-    
-    except Exception as e:
-        logger.error(f"Search endpoint error: {e}")
-        return jsonify({"error": f"Search failed: {str(e)}"}), 500
-
-@app.route('/api/aggregate', methods=['POST'])
-def aggregate_metrics():
-    """Handle aggregation requests via MCP"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
-            
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-            
-        metric = data.get('metric')
-        group_by = data.get('group_by')
-        time_range = data.get('time_range')
-        
-        logger.info(f"Aggregation request via MCP: metric={metric}, group_by={group_by}, time_range={time_range}")
-        
-        if not metric or not group_by:
-            return jsonify({"error": "Metric and group_by are required"}), 400
-        
-        result = mcp_client.aggregate_business_metrics(metric, group_by, time_range)
-        
-        # Debug log the result
-        logger.info(f"MCP Aggregation result: {len(result.get('results', []))} buckets, total_value={result.get('total_value', 0)}")
-        
-        return jsonify(result), 200
-    
-    except Exception as e:
-        logger.error(f"Aggregation endpoint error: {e}")
-        return jsonify({
-            "metric": metric if 'metric' in locals() else "unknown",
-            "group_by": group_by if 'group_by' in locals() else "unknown", 
-            "results": [],
-            "error": str(e)
-        }), 500
-
-@app.route('/api/claude-qa', methods=['POST'])
-def claude_qa():
-    """Ask Claude questions about business data"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
-            
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-            
-        question = data.get('question', '')
-        include_search = data.get('include_search', True)
-        search_query = data.get('search_query', question)
-        
-        if not question.strip():
-            return jsonify({"error": "Question cannot be empty"}), 400
-        
-        # First, search for relevant data if requested
-        context_data = None
-        if include_search and search_query:
-            try:
-                # Use keyword search for context (since semantic might not be available)
-                search_result = mcp_client.search_business_data(search_query, "keyword", 5)
-                if search_result.get('results'):
-                    context_data = search_result
-            except Exception as e:
-                logger.warning(f"Search for context failed: {e}")
-        
-        # Ask Claude about the data
-        claude_response = mcp_client.ask_claude_about_data(question, context_data)
-        
-        # Combine response with search results
-        response = {
-            "question": question,
-            "answer": claude_response["answer"],
-            "context_data": context_data,
-            "needs_more_data": claude_response.get("needs_data", False),
-            "suggestion": claude_response.get("suggestion", "")
+    def check_ai_capabilities(self):
+        """Check what AI search capabilities are available"""
+        self.capabilities = {
+            "elser": False,
+            "embedding": False,
+            "rerank": False
         }
         
-        return jsonify(response), 200
-    
-    except Exception as e:
-        logger.error(f"Claude Q&A endpoint error: {e}")
-        return jsonify({"error": str(e)}), 500
+        try:
+            # Check if inference endpoints exist
+            response = self.es_client.inference.get(inference_id="_all")
+            available_endpoints = [ep['inference_id'] for ep in response['endpoints']]
+            
+            for capability, endpoint_id in self.inference_endpoints.items():
+                if endpoint_id in available_endpoints:
+                    self.capabilities[capability] = True
+                    logger.info(f"✅ {capability.upper()} available: {endpoint_id}")
+                else:
+                    logger.warning(f"⚠️  {capability.upper()} not available: {endpoint_id}")
+            
+            # Test ELSER if available
+            if self.capabilities["elser"]:
+                try:
+                    self.es_client.inference.inference(
+                        inference_id=self.inference_endpoints["elser"],
+                        body={"input": ["test"]}
+                    )
+                    logger.info("✅ ELSER endpoint is responsive")
+                except Exception as e:
+                    logger.warning(f"⚠️  ELSER endpoint test failed: {e}")
+                    self.capabilities["elser"] = False
+                    
+        except Exception as e:
+            logger.warning(f"Could not check AI capabilities: {e}")
 
-@app.route('/api/smart-search', methods=['POST'])
-def smart_search():
-    """Intelligent search that combines data retrieval with analysis"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
-            
-        data = request.get_json()
-        if not data:
-            return jsonify({"error": "No JSON data provided"}), 400
-            
-        query = data.get('query', '')
-        
-        if not query.strip():
-            return jsonify({"error": "Query cannot be empty"}), 400
-        
-        logger.info(f"Smart search: '{query}'")
-        
-        # Step 1: Search for relevant data
-        search_results = []
+    async def handle_request(self, request):
+        """Handle incoming MCP requests"""
         try:
-            search_result = mcp_client.search_business_data(query, "keyword", 10)
-            if search_result.get('results'):
-                search_results = search_result['results']
+            method = request.get("method")
+            params = request.get("params", {})
+            request_id = request.get("id")
+            
+            # Ensure request_id is never null for JSON-RPC compliance
+            if request_id is None:
+                request_id = 0
+            
+            # Handle MCP protocol initialization
+            if method == "initialize":
+                result = await self.handle_initialize(params)
+            elif method == "tools/list":
+                result = await self.list_tools()
+            elif method == "tools/call":
+                result = await self.call_tool(params)
+            else:
+                # Return proper error response
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Method not found: {method}"
+                    }
+                }
+            
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": result
+            }
+            
         except Exception as e:
-            logger.warning(f"Search failed: {e}")
+            logger.error(f"Error handling request: {e}")
+            # Ensure we always have a valid request_id
+            error_id = request.get("id") if request.get("id") is not None else 0
+            
+            return {
+                "jsonrpc": "2.0",
+                "id": error_id,
+                "error": {
+                    "code": -32000,
+                    "message": str(e)
+                }
+            }
+
+    async def handle_initialize(self, params):
+        """Handle MCP initialization request"""
+        logger.info("Handling MCP initialize request")
         
-        # Step 2: Get business summary for context
-        try:
-            business_summary = mcp_client.get_business_summary()
-        except Exception as e:
-            logger.warning(f"Business summary failed: {e}")
-            business_summary = None
+        # Include AI capabilities in server info
+        ai_features = []
+        if self.capabilities["elser"]:
+            ai_features.append("ELSER Semantic Search")
+        if self.capabilities["embedding"]:
+            ai_features.append("Dense Vector Embeddings")
+        if self.capabilities["rerank"]:
+            ai_features.append("AI Reranking")
         
-        # Step 3: Try some relevant aggregations
-        aggregation_results = []
-        common_aggregations = [
-            ("sales", "region"),
-            ("revenue", "product_category"),
-            ("orders", "sales_rep")
-        ]
+        return {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+                "tools": {}
+            },
+            "serverInfo": {
+                "name": "enhanced-business-intelligence",
+                "version": "2.0.0",
+                "description": f"AI-Powered Business Intelligence with {', '.join(ai_features) if ai_features else 'Keyword Search'}"
+            }
+        }
+
+    async def list_tools(self):
+        """List available MCP tools with enhanced search capabilities"""
         
-        for metric, group_by in common_aggregations:
-            try:
-                agg_result = mcp_client.aggregate_business_metrics(metric, group_by, None)
-                if agg_result.get('results'):
-                    aggregation_results.append(agg_result)
-            except:
-                continue
+        # Build search type options based on available capabilities
+        search_types = ["keyword"]
+        if self.capabilities["elser"]:
+            search_types.append("semantic")
+        if self.capabilities["embedding"]:
+            search_types.append("embedding")
+        if self.capabilities["elser"] and self.capabilities["embedding"]:
+            search_types.append("hybrid")
+        if self.capabilities["rerank"]:
+            search_types.append("rerank")
         
-        # Step 4: Analyze results
-        analysis = {
-            "summary": f"Smart search analyzed your query '{query}' and found {len(search_results)} relevant records.",
-            "insights": [
-                f"Search identified {len(search_results)} matching business records",
-                f"Generated {len(aggregation_results)} metric summaries",
-                "Data includes sales, revenue, and operational metrics across regions and categories"
-            ],
-            "recommendations": [
-                "Review the search results for specific data points",
-                "Check the aggregations for high-level trends",
-                "Use the Claude Q&A feature for detailed analysis",
-                "Try more specific search terms for targeted results"
+        search_type_description = f"Type of search ({', '.join(search_types)})"
+        
+        return {
+            "tools": [
+                {
+                    "name": "search_business_data",
+                    "description": f"Search business intelligence data using natural language queries. Available search types: {', '.join(search_types)}",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string", "description": "Search query"},
+                            "search_type": {"type": "string", "description": search_type_description, "default": "keyword"},
+                            "size": {"type": "integer", "description": "Number of results to return", "default": 10}
+                        },
+                        "required": ["query"]
+                    }
+                },
+                {
+                    "name": "aggregate_business_metrics",
+                    "description": "Perform aggregations on business data (sales, revenue, orders, customers)",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "metric": {"type": "string", "description": "Metric to aggregate (sales, revenue, orders, customers)"},
+                            "group_by": {"type": "string", "description": "Field to group by (region, product_category, sales_rep)"},
+                            "time_range": {"type": "string", "description": "Time filter (last_month, last_quarter, ytd)", "default": None}
+                        },
+                        "required": ["metric", "group_by"]
+                    }
+                },
+                {
+                    "name": "get_business_summary",
+                    "description": "Get a comprehensive summary of business performance metrics",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "time_range": {"type": "string", "description": "Time filter (last_month, last_quarter, ytd)", "default": None}
+                        }
+                    }
+                },
+                {
+                    "name": "get_ai_capabilities",
+                    "description": "Get information about available AI search capabilities",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {}
+                    }
+                }
             ]
         }
-        
-        # Add business summary insights if available
-        if business_summary:
-            total_records = business_summary.get('summary', {}).get('total_records', 0)
-            analysis["insights"].insert(0, f"Database contains {total_records:,} total business records")
-        
-        return jsonify({
-            "query": query,
-            "search_results": search_results[:10],
-            "aggregations": aggregation_results,
-            "business_summary": business_summary,
-            "analysis": analysis
-        }), 200
-    
-    except Exception as e:
-        logger.error(f"Smart search endpoint error: {e}")
-        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/test-agg')
-def test_aggregation():
-    """Test aggregation endpoint via MCP"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
+    async def call_tool(self, params):
+        """Call a specific tool"""
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
         
-        # Test a simple aggregation
-        result = mcp_client.aggregate_business_metrics("sales", "region", None)
+        # Validate tool name
+        if not tool_name:
+            raise ValueError("Tool name is required")
         
-        return jsonify({
-            "test": "mcp_aggregation",
-            "raw_result": result,
-            "has_results": len(result.get('results', [])) > 0,
-            "total_value": result.get('total_value', 0),
-            "error": result.get('error', None)
-        })
+        if tool_name == "search_business_data":
+            result = await self.search_business_data(**arguments)
+        elif tool_name == "aggregate_business_metrics":
+            result = await self.aggregate_business_metrics(**arguments)
+        elif tool_name == "get_business_summary":
+            result = await self.get_business_summary(**arguments)
+        elif tool_name == "get_ai_capabilities":
+            result = await self.get_ai_capabilities()
+        else:
+            raise ValueError(f"Unknown tool: {tool_name}")
         
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return {
+            "content": [
+                {
+                    "type": "text", 
+                    "text": json.dumps(result, indent=2)
+                }
+            ]
+        }
 
-@app.route('/api/health')
-def health_check():
-    """Enhanced health check via MCP"""
-    try:
-        if not mcp_client:
-            return jsonify({
-                "status": "unhealthy",
-                "mcp_client": "not_available",
-                "timestamp": datetime.now().isoformat()
-            }), 500
-        
-        health_info = mcp_client.get_health_info()
-        health_info.update({
-            "architecture": "Flask Web App → MCP Server → Elasticsearch",
-            "elasticsearch_endpoint": os.getenv("ELASTICSEARCH_ENDPOINT", "Not configured"),
-            "index": os.getenv("ELASTICSEARCH_INDEX", "business_intelligence"),
-            "features": ["search", "aggregations", "claude_qa", "smart_search", "business_summary"]
-        })
-        
-        return jsonify(health_info)
-        
-    except Exception as e:
-        logger.error(f"Health check error: {e}")
-        return jsonify({
-            "status": "unhealthy",
-            "error": str(e),
-            "timestamp": datetime.now().isoformat()
-        }), 500
-
-@app.route('/api/mcp-tools')
-def list_mcp_tools():
-    """List available MCP tools"""
-    try:
-        if not mcp_client:
-            return jsonify({"error": "MCP client not available"}), 500
-        
-        result = mcp_client.call_mcp_tool("tools/list", {})
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-# Cleanup function
-def cleanup():
-    if mcp_client:
-        mcp_client.cleanup()
-
-# Register cleanup
-import atexit
-atexit.register(cleanup)
-
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
-    debug = os.getenv('NODE_ENV', 'development') == 'development'
-    
-    print("🚀 Starting MCP-Powered Business Intelligence App")
-    print("=" * 60)
-    print("🏗️  Architecture: Browser → Flask → MCP Server → Elasticsearch")
-    print(f"   Port: {port}")
-    print(f"   Elasticsearch: {os.getenv('ELASTICSEARCH_ENDPOINT', 'Not configured')}")
-    print(f"   Index: {os.getenv('ELASTICSEARCH_INDEX', 'business_intelligence')}")
-    
-    if mcp_client:
-        print("   Status: ✅ MCP Client Connected")
+    async def search_business_data(self, query, search_type="keyword", size=10):
+        """Enhanced search with multiple AI-powered search types"""
         try:
-            health = mcp_client.get_health_info()
-            print(f"   MCP Tools: {health.get('available_tools', 0)} available")
-            print(f"   Tools: {', '.join(health.get('tools', []))}")
-        except:
-            print("   MCP Status: ⚠️  Connected but health check failed")
-    else:
-        print("   Status: ❌ MCP Client Failed")
-    
-    print("=" * 60)
-    print("🔧 Available Endpoints:")
-    print("   • /api/health - System health with MCP status")
-    print("   • /api/mcp-tools - List available MCP tools")
-    print("   • /api/search - Search via MCP")
-    print("   • /api/aggregate - Analytics via MCP") 
-    print("   • /api/claude-qa - Ask questions about your data")
-    print("   • /api/smart-search - Intelligent search with analysis")
-    print("=" * 60)
-    print("🚀 Ready! Open http://localhost:5000 in your browser")
-    print("=" * 60)
-    
+            # Validate inputs
+            if not query or not isinstance(query, str):
+                raise ValueError("Query must be a non-empty string")
+            
+            if not isinstance(size, int) or size < 1:
+                size = 10
+                
+            logger.info(f"Searching: '{query}' (type: {search_type}, size: {size})")
+            
+            # Build search query based on type and capabilities
+            if search_type == "keyword":
+                search_query = self._build_keyword_query(query, size)
+            elif search_type == "semantic" and self.capabilities["elser"]:
+                search_query = self._build_semantic_query(query, size)
+            elif search_type == "embedding" and self.capabilities["embedding"]:
+                search_query = self._build_embedding_query(query, size)
+            elif search_type == "hybrid" and self.capabilities["elser"] and self.capabilities["embedding"]:
+                search_query = self._build_hybrid_query(query, size)
+            elif search_type == "rerank" and self.capabilities["rerank"]:
+                search_query = self._build_rerank_query(query, size)
+            else:
+                # Fallback to keyword with informative message
+                logger.warning(f"Search type '{search_type}' not available, using keyword")
+                search_query = self._build_keyword_query(query, size)
+                search_type = f"{search_type} (fallback to keyword)"
+            
+            response = self.es_client.search(index=self.index_name, body=search_query)
+            
+            results = []
+            for hit in response["hits"]["hits"]:
+                source = hit["_source"]
+                result = {
+                    "score": round(hit["_score"], 3),
+                    "product_name": source.get("product_name", "N/A"),
+                    "region": source.get("region", "N/A"),
+                    "sales_rep": source.get("sales_rep", "N/A"),
+                    "sales_amount": source.get("sales_amount", 0),
+                    "revenue": source.get("revenue", 0),
+                    "date": source.get("date", ""),
+                    "order_count": source.get("order_count", 0),
+                    "customer_count": source.get("customer_count", 0),
+                    "product_category": source.get("product_category", "N/A"),
+                    "description": source.get("description", "")[:200] + "..." if source.get("description", "") else ""
+                }
+                results.append(result)
+            
+            return {
+                "search_type": search_type,
+                "total_hits": response["hits"]["total"]["value"],
+                "results": results,
+                "ai_capabilities": self.capabilities
+            }
+            
+        except Exception as e:
+            logger.error(f"Search failed: {e}")
+            # Try keyword search as fallback
+            if search_type != "keyword":
+                logger.info("Attempting keyword search as fallback")
+                return await self.search_business_data(query, "keyword", size)
+            else:
+                raise
+
+    def _build_keyword_query(self, query, size):
+        """Build optimized keyword search query"""
+        return {
+            "query": {
+                "bool": {
+                    "should": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["description^2", "product_name^1.5", "region", "sales_rep"],
+                                "type": "best_fields",
+                                "fuzziness": "AUTO"
+                            }
+                        },
+                        {
+                            "match": {
+                                "product_category": {
+                                    "query": query,
+                                    "boost": 1.2
+                                }
+                            }
+                        }
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "size": min(size, 100),
+            "sort": [
+                {"_score": {"order": "desc"}},
+                {"sales_amount": {"order": "desc"}}
+            ],
+            "_source": {
+                "excludes": ["ml.inference.*", "ml.*"]
+            }
+        }
+
+    def _build_semantic_query(self, query, size):
+        """Build ELSER semantic search query"""
+        return {
+            "query": {
+                "bool": {
+                    "should": [
+                        {
+                            "sparse_vector": {
+                                "field": "ml.inference.description_elser",
+                                "inference_id": self.inference_endpoints["elser"],
+                                "query": query,
+                                "boost": 2.0
+                            }
+                        },
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["product_name^1.5", "region"],
+                                "boost": 0.5
+                            }
+                        }
+                    ]
+                }
+            },
+            "size": min(size, 100),
+            "_source": {
+                "excludes": ["ml.inference.*", "ml.*"]
+            }
+        }
+
+    def _build_embedding_query(self, query, size):
+        """Build dense vector embedding search query"""
+        try:
+            # Get embedding for query
+            inference_response = self.es_client.inference.inference(
+                inference_id=self.inference_endpoints["embedding"],
+                body={"input": [query]}
+            )
+            
+            if "text_embedding" in inference_response and inference_response["text_embedding"]:
+                dense_vector = inference_response["text_embedding"][0]
+                
+                return {
+                    "query": {
+                        "script_score": {
+                            "query": {"match_all": {}},
+                            "script": {
+                                "source": "cosineSimilarity(params.query_vector, 'ml.inference.description_embedding') + 1.0",
+                                "params": {
+                                    "query_vector": dense_vector
+                                }
+                            }
+                        }
+                    },
+                    "size": min(size, 100),
+                    "_source": {
+                        "excludes": ["ml.inference.*", "ml.*"]
+                    }
+                }
+            else:
+                raise Exception("Failed to get embedding")
+                
+        except Exception as e:
+            logger.warning(f"Embedding search failed: {e}")
+            raise
+
+    def _build_hybrid_query(self, query, size):
+        """Build hybrid search combining ELSER and keyword"""
+        return {
+            "query": {
+                "bool": {
+                    "should": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["description^1.5", "product_name", "region"],
+                                "boost": 1.0
+                            }
+                        },
+                        {
+                            "sparse_vector": {
+                                "field": "ml.inference.description_elser",
+                                "inference_id": self.inference_endpoints["elser"],
+                                "query": query,
+                                "boost": 1.5
+                            }
+                        }
+                    ],
+                    "minimum_should_match": 1
+                }
+            },
+            "size": min(size, 100),
+            "_source": {
+                "excludes": ["ml.inference.*", "ml.*"]
+            }
+        }
+
+    def _build_rerank_query(self, query, size):
+        """Build search with AI reranking"""
+        # First get more results, then rerank
+        initial_results = min(size * 3, 50)  # Get 3x results for reranking
+        
+        return {
+            "query": {
+                "bool": {
+                    "should": [
+                        {
+                            "multi_match": {
+                                "query": query,
+                                "fields": ["description^2", "product_name^1.5", "region", "sales_rep"],
+                                "type": "best_fields"
+                            }
+                        }
+                    ]
+                }
+            },
+            "size": initial_results,
+            "_source": {
+                "excludes": ["ml.inference.*", "ml.*"]
+            }
+        }
+
+    async def aggregate_business_metrics(self, metric, group_by, time_range=None):
+        """Aggregate business metrics (unchanged from original)"""
+        try:
+            # Validate inputs
+            if not metric or not isinstance(metric, str):
+                raise ValueError("Metric must be a non-empty string")
+            if not group_by or not isinstance(group_by, str):
+                raise ValueError("Group_by must be a non-empty string")
+                
+            logger.info(f"Aggregating {metric} by {group_by} for {time_range}")
+            
+            # Map metric names to field names
+            metric_field_map = {
+                "sales": "sales_amount",
+                "revenue": "revenue", 
+                "orders": "order_count",
+                "customers": "customer_count"
+            }
+            
+            aggregation_field = metric_field_map.get(metric, "sales_amount")
+            
+            # Build time filter
+            query_filter = {"match_all": {}}
+            if time_range == "last_month":
+                query_filter = {
+                    "range": {
+                        "date": {
+                            "gte": "now-60d"
+                        }
+                    }
+                }
+            elif time_range == "last_quarter":
+                query_filter = {
+                    "range": {
+                        "date": {
+                            "gte": "now-180d"
+                        }
+                    }
+                }
+            elif time_range == "ytd":
+                query_filter = {
+                    "range": {
+                        "date": {
+                            "gte": "2024-01-01"
+                        }
+                    }
+                }
+            
+            search_body = {
+                "query": query_filter,
+                "aggs": {
+                    "grouped_data": {
+                        "terms": {
+                            "field": f"{group_by}.keyword",
+                            "size": 10,
+                            "missing": "Unknown"
+                        },
+                        "aggs": {
+                            "metric_value": {
+                                "sum": {
+                                    "field": aggregation_field
+                                }
+                            },
+                            "avg_value": {
+                                "avg": {
+                                    "field": aggregation_field
+                                }
+                            }
+                        }
+                    },
+                    "total_metric": {
+                        "sum": {
+                            "field": aggregation_field
+                        }
+                    }
+                },
+                "size": 0
+            }
+            
+            response = self.es_client.search(index=self.index_name, body=search_body)
+            
+            # Process results
+            buckets = []
+            total_value = response["aggregations"]["total_metric"]["value"]
+            
+            for bucket in response["aggregations"]["grouped_data"]["buckets"]:
+                value = bucket["metric_value"]["value"]
+                percentage = (value / total_value * 100) if total_value > 0 else 0
+                
+                result = {
+                    group_by: bucket["key"],
+                    metric: round(value, 2),
+                    "percentage": round(percentage, 1),
+                    "average": round(bucket["avg_value"]["value"], 2),
+                    "doc_count": bucket["doc_count"]
+                }
+                buckets.append(result)
+            
+            # Sort by metric value descending
+            buckets.sort(key=lambda x: x[metric], reverse=True)
+            
+            return {
+                "metric": metric,
+                "group_by": group_by,
+                "time_range": time_range,
+                "aggregation_type": "sum",
+                "total_value": round(total_value, 2),
+                "results": buckets
+            }
+            
+        except Exception as e:
+            logger.error(f"Aggregation failed: {e}")
+            raise
+
+    async def get_business_summary(self, time_range=None):
+        """Get a comprehensive business summary (unchanged from original)"""
+        try:
+            # Get key metrics
+            sales_by_region = await self.aggregate_business_metrics("sales", "region", time_range)
+            revenue_by_category = await self.aggregate_business_metrics("revenue", "product_category", time_range)
+            orders_by_rep = await self.aggregate_business_metrics("orders", "sales_rep", time_range)
+            
+            # Get total counts
+            count_response = self.es_client.count(index=self.index_name)
+            
+            return {
+                "summary": {
+                    "total_records": count_response["count"],
+                    "time_range": time_range or "all_time",
+                    "generated_at": datetime.now().isoformat(),
+                    "ai_capabilities": self.capabilities
+                },
+                "sales_by_region": sales_by_region["results"][:5],
+                "revenue_by_category": revenue_by_category["results"][:5],
+                "top_sales_reps": orders_by_rep["results"][:5],
+                "totals": {
+                    "total_sales": sales_by_region["total_value"],
+                    "total_revenue": revenue_by_category["total_value"],
+                    "total_orders": orders_by_rep["total_value"]
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Business summary failed: {e}")
+            raise
+
+    async def get_ai_capabilities(self):
+        """Get information about available AI search capabilities"""
+        return {
+            "ai_capabilities": self.capabilities,
+            "inference_endpoints": {
+                "elser": self.inference_endpoints["elser"] if self.capabilities["elser"] else "Not available",
+                "embedding": self.inference_endpoints["embedding"] if self.capabilities["embedding"] else "Not available",
+                "rerank": self.inference_endpoints["rerank"] if self.capabilities["rerank"] else "Not available"
+            },
+            "available_search_types": [
+                "keyword",
+                *([f"semantic (ELSER)"] if self.capabilities["elser"] else []),
+                *([f"embedding (E5)"] if self.capabilities["embedding"] else []),
+                *([f"hybrid"] if self.capabilities["elser"] and self.capabilities["embedding"] else []),
+                *([f"rerank"] if self.capabilities["rerank"] else [])
+            ],
+            "description": "Enhanced Business Intelligence MCP Server with AI-powered search capabilities"
+        }
+
+    async def run_server(self):
+        """Run the MCP server"""
+        logger.info("Enhanced MCP Server started - waiting for requests...")
+        logger.info(f"AI Capabilities: {self.capabilities}")
+        
+        try:
+            while True:
+                # Read JSON-RPC request from stdin
+                line = await asyncio.get_event_loop().run_in_executor(None, sys.stdin.readline)
+                if not line:
+                    break
+                
+                try:
+                    request = json.loads(line.strip())
+                    response = await self.handle_request(request)
+                    
+                    # Write response to stdout
+                    print(json.dumps(response), flush=True)
+                    
+                except json.JSONDecodeError as e:
+                    logger.error(f"Invalid JSON received: {e}")
+                    error_response = {
+                        "jsonrpc": "2.0",
+                        "id": 0,  # Use 0 instead of null for invalid JSON
+                        "error": {
+                            "code": -32700,
+                            "message": "Parse error"
+                        }
+                    }
+                    print(json.dumps(error_response), flush=True)
+                    
+        except KeyboardInterrupt:
+            logger.info("Enhanced MCP Server stopping...")
+        except Exception as e:
+            logger.error(f"Enhanced MCP Server error: {e}")
+            raise
+
+async def main():
+    """Main function to run the enhanced MCP server"""
     try:
-        app.run(host='0.0.0.0', port=port, debug=debug)
-    finally:
-        cleanup()
+        server = EnhancedBusinessIntelligenceMCPServer()
+        await server.run_server()
+    except Exception as e:
+        logger.error(f"Failed to start enhanced MCP server: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    asyncio.run(main())
