@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Intelligence Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .loading-spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .search-type-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .badge-keyword { background-color: #dbeafe; color: #1e40af; }
+        .badge-semantic { background-color: #dcfce7; color: #166534; }
+        .badge-embedding { background-color: #fef3c7; color: #92400e; }
+        .badge-hybrid { background-color: #e0e7ff; color: #3730a3; }
+        .badge-rerank { background-color: #fce7f3; color: #be185d; }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div class="max-w-7xl mx-auto p-6">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <div class="flex items-center justify-center mb-4">
+                <i data-lucide="bar-chart-3" class="w-8 h-8 text-blue-600 mr-3"></i>
+                <h1 class="text-4xl font-bold text-gray-800">Business Intelligence Assistant</h1>
+            </div>
+            <p class="text-lg text-gray-600 max-w-2xl mx-auto">
+                Query your business data using natural language. Powered by <strong>MCP (Model Context Protocol)</strong> with Elasticsearch semantic search and ELSER.
+            </p>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <div class="flex justify-center mb-8">
+            <div class="bg-white rounded-lg p-1 shadow-md">
+                <button 
+                    id="search-tab" 
+                    class="tab-button px-6 py-2 rounded-md transition-all bg-blue-600 text-white shadow-md"
+                    onclick="switchTab('search')"
+                >
+                    <i data-lucide="search" class="w-4 h-4 inline mr-2"></i>
+                    Search & Filters
+                </button>
+                <button 
+                    id="analytics-tab" 
+                    class="tab-button px-6 py-2 rounded-md transition-all text-gray-600 hover:text-blue-600"
+                    onclick="switchTab('analytics')"
+                >
+                    <i data-lucide="trending-up" class="w-4 h-4 inline mr-2"></i>
+                    Quick Analytics
+                </button>
+                <button 
+                    id="claude-tab" 
+                    class="tab-button px-6 py-2 rounded-md transition-all text-gray-600 hover:text-blue-600"
+                    onclick="switchTab('claude')"
+                >
+                    <i data-lucide="brain" class="w-4 h-4 inline mr-2"></i>
+                    Ask Claude (MCP)
+                </button>
+            </div>
+        </div>
+
+        <!-- Search Tab -->
+        <div id="search-panel" class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Search your business data with advanced filters
+                    </label>
+                    <div class="flex gap-4 mb-4">
+                        <input
+                            type="text"
+                            id="search-query"
+                            placeholder="e.g., 'Show me sales trends for Q3 2024 by region' or 'Which sales rep had the highest revenue last month?'"
+                            class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            onkeypress="handleKeyPress(event)"
+                        />
+                        <select
+                            id="search-type"
+                            class="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            onchange="updateSearchTypeInfo()"
+                        >
+                            <option value="keyword">Keyword Search</option>
+                            <option value="semantic">Semantic (ELSER)</option>
+                            <option value="embedding">Dense Vector (E5)</option>
+                            <option value="hybrid">Hybrid Search</option>
+                            <option value="rerank">Search + Rerank</option>
+                        </select>
+                        <button
+                            onclick="performSearch()"
+                            id="search-button"
+                            class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                        >
+                            <i data-lucide="search" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+
+                    <!-- Search Type Information -->
+                    <div id="search-info" class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+                        <div class="flex items-center">
+                            <i data-lucide="info" class="w-4 h-4 text-blue-600 mr-2"></i>
+                            <span id="search-info-text" class="text-blue-800">
+                                <strong>Keyword Search:</strong> Traditional text matching with relevance scoring
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Query Buttons -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        Quick queries to try:
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="quick-query-btn px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors" onclick="setQuery(this.textContent)">Show me last quarter's sales trends by region</button>
+                        <button class="quick-query-btn px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors" onclick="setQuery(this.textContent)">Which products performed best in North America?</button>
+                        <button class="quick-query-btn px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors" onclick="setQuery(this.textContent)">Sales performance of Alice Johnson this year</button>
+                        <button class="quick-query-btn px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors" onclick="setQuery(this.textContent)">Enterprise software revenue trends</button>
+                        <button class="quick-query-btn px-3 py-1 text-sm bg-blue-50 text-blue-700 rounded-full hover:bg-blue-100 transition-colors" onclick="setQuery(this.textContent)">Top performing regions last month</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="analytics-panel" class="bg-white rounded-xl shadow-lg p-8 mb-8 hidden">
+            <h3 class="text-xl font-semibold text-gray-800 mb-6">Quick Analytics</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('sales', 'region', null)"
+                >
+                    <i data-lucide="map-pin" class="w-5 h-5 text-blue-600 mb-2"></i>
+                    <div class="font-medium">Sales by Region</div>
+                    <div class="text-sm text-gray-600">All time performance</div>
+                </button>
+                
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('revenue', 'product_category', null)"
+                >
+                    <i data-lucide="package" class="w-5 h-5 text-green-600 mb-2"></i>
+                    <div class="font-medium">Revenue by Category</div>
+                    <div class="text-sm text-gray-600">All time breakdown</div>
+                </button>
+                
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('orders', 'sales_rep', null)"
+                >
+                    <i data-lucide="users" class="w-5 h-5 text-purple-600 mb-2"></i>
+                    <div class="font-medium">Orders by Sales Rep</div>
+                    <div class="text-sm text-gray-600">All time totals</div>
+                </button>
+                
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('sales', 'region', 'last_quarter')"
+                >
+                    <i data-lucide="calendar" class="w-5 h-5 text-orange-600 mb-2"></i>
+                    <div class="font-medium">Recent Sales by Region</div>
+                    <div class="text-sm text-gray-600">Last 180 days</div>
+                </button>
+                
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('revenue', 'product_category', 'last_month')"
+                >
+                    <i data-lucide="trending-up" class="w-5 h-5 text-red-600 mb-2"></i>
+                    <div class="font-medium">Recent Revenue by Category</div>
+                    <div class="text-sm text-gray-600">Last 60 days</div>
+                </button>
+                
+                <button
+                    class="analytics-btn p-4 border border-gray-200 rounded-lg hover:bg-gray-50 text-left transition-colors"
+                    onclick="performAggregation('customers', 'region', null)"
+                >
+                    <i data-lucide="user-check" class="w-5 h-5 text-indigo-600 mb-2"></i>
+                    <div class="font-medium">Customers by Region</div>
+                    <div class="text-sm text-gray-600">All time totals</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- Claude Q&A Tab -->
+        <div id="claude-panel" class="bg-white rounded-xl shadow-lg p-8 mb-8 hidden">
+            <h3 class="text-xl font-semibold text-gray-800 mb-6">Ask Claude About Your Business Data</h3>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Ask a natural language question about your business
+                    </label>
+                    <div class="flex gap-4 mb-4">
+                        <textarea
+                            id="claude-question"
+                            placeholder="e.g., 'What are our top 3 regions by sales revenue?' or 'How is our enterprise software performing compared to hardware?'"
+                            class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                            rows="3"
+                            onkeypress="handleClaudeKeyPress(event)"
+                        ></textarea>
+                        <div class="flex flex-col gap-2">
+                            <button
+                                onclick="askClaude()"
+                                id="claude-button"
+                                class="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                                <i data-lucide="brain" class="w-4 h-4 mr-2"></i>
+                                Ask Claude
+                            </button>
+                            <button
+                                onclick="smartSearch()"
+                                id="smart-search-button"
+                                class="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                            >
+                                <i data-lucide="sparkles" class="w-4 h-4 mr-2"></i>
+                                Smart Search
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm">
+                        <div class="flex items-center">
+                            <i data-lucide="info" class="w-4 h-4 text-purple-600 mr-2"></i>
+                            <span class="text-purple-800">
+                                <strong>Claude Q&A:</strong> Powered by MCP (Model Context Protocol) - asks Claude to analyze your business data and provide insights
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sample Questions -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-3">
+                        Sample questions to try:
+                    </label>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="claude-query-btn px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded-full hover:bg-purple-100 transition-colors" onclick="setClaudeQuery(this.textContent)">What are our top 5 regions by sales revenue?</button>
+                        <button class="claude-query-btn px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded-full hover:bg-purple-100 transition-colors" onclick="setClaudeQuery(this.textContent)">How is enterprise software performing vs hardware?</button>
+                        <button class="claude-query-btn px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded-full hover:bg-purple-100 transition-colors" onclick="setClaudeQuery(this.textContent)">Which sales rep has the highest order count?</button>
+                        <button class="claude-query-btn px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded-full hover:bg-purple-100 transition-colors" onclick="setClaudeQuery(this.textContent)">Show me revenue trends by product category</button>
+                        <button class="claude-query-btn px-3 py-1 text-sm bg-purple-50 text-purple-700 rounded-full hover:bg-purple-100 transition-colors" onclick="setClaudeQuery(this.textContent)">What insights can you find in our sales data?</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div id="results-panel" class="bg-white rounded-xl shadow-lg p-8 hidden">
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-xl font-semibold text-gray-800">Results</h3>
+                <span id="results-count" class="text-sm text-gray-600"></span>
+            </div>
+            <div id="results-content"></div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-12 text-gray-600">
+            <p class="text-sm mb-4">
+                Powered by <strong>MCP (Model Context Protocol)</strong> with Elasticsearch and ELSER semantic search
+            </p>
+            <div class="text-xs mb-4 bg-blue-50 inline-block px-4 py-2 rounded-lg">
+                🏗️ Architecture: Browser → Flask Web App → MCP Server → Elasticsearch
+            </div>
+            <!-- Debug Tools -->
+            <div class="flex justify-center gap-4 text-xs">
+                <a href="/api/health" target="_blank" class="text-blue-600 hover:text-blue-800">Health Check</a>
+                <a href="/api/mcp-tools" target="_blank" class="text-blue-600 hover:text-blue-800">MCP Tools</a>
+                <a href="/api/test-agg" target="_blank" class="text-blue-600 hover:text-blue-800">Test Aggregation</a>
+                <button onclick="testSearch()" class="text-blue-600 hover:text-blue-800 underline">Test All Search Types</button>
+                <button onclick="testAggregationDirectly()" class="text-blue-600 hover:text-blue-800 underline">Test Analytics</button>
+                <button onclick="testClaudeFeatures()" class="text-blue-600 hover:text-blue-800 underline">Test Claude Features</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'search';
+        let isLoading = false;
+
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // Search type information
+        const searchTypeInfo = {
+            keyword: {
+                text: "<strong>Keyword Search:</strong> Traditional text matching with relevance scoring",
+                class: "badge-keyword"
+            },
+            semantic: {
+                text: "<strong>Semantic (ELSER):</strong> Understanding meaning and context using sparse vectors",
+                class: "badge-semantic"
+            },
+            embedding: {
+                text: "<strong>Dense Vector (E5):</strong> Multilingual dense embeddings for similarity search",
+                class: "badge-embedding"
+            },
+            hybrid: {
+                text: "<strong>Hybrid Search:</strong> Combines keyword and semantic search for best results",
+                class: "badge-hybrid"
+            },
+            rerank: {
+                text: "<strong>Search + Rerank:</strong> Initial search followed by AI reranking for relevance",
+                class: "badge-rerank"
+            }
+        };
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            const tabs = ['search', 'analytics', 'claude'];
+            tabs.forEach(t => {
+                const tabButton = document.getElementById(t + '-tab');
+                if (t === tab) {
+                    tabButton.classList.add('bg-blue-600', 'text-white', 'shadow-md');
+                    tabButton.classList.remove('text-gray-600', 'hover:text-blue-600');
+                } else {
+                    tabButton.classList.remove('bg-blue-600', 'text-white', 'shadow-md');
+                    tabButton.classList.add('text-gray-600', 'hover:text-blue-600');
+                }
+            });
+            
+            // Show/hide panels
+            document.getElementById('search-panel').classList.toggle('hidden', tab !== 'search');
+            document.getElementById('analytics-panel').classList.toggle('hidden', tab !== 'analytics');
+            document.getElementById('claude-panel').classList.toggle('hidden', tab !== 'claude');
+        }
+
+        function updateSearchTypeInfo() {
+            const searchType = document.getElementById('search-type').value;
+            const info = searchTypeInfo[searchType];
+            document.getElementById('search-info-text').innerHTML = info.text;
+        }
+
+        function setQuery(query) {
+            document.getElementById('search-query').value = query;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        }
+
+        async function performSearch() {
+            const query = document.getElementById('search-query').value.trim();
+            if (!query || isLoading) return;
+
+            const searchType = document.getElementById('search-type').value;
+
+            setLoading(true);
+
+            try {
+                const response = await fetch('/api/search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        query: query,
+                        search_type: searchType,
+                        size: 10
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displaySearchResults(data);
+                } else {
+                    showError(data.error || 'Search failed');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function performAggregation(metric, groupBy, timeRange) {
+            if (isLoading) return;
+
+            setLoading(true);
+
+            try {
+                console.log(`Requesting aggregation: ${metric} by ${groupBy} for ${timeRange}`);
+                
+                const response = await fetch('/api/aggregate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        metric: metric,
+                        group_by: groupBy,
+                        time_range: timeRange,
+                        aggregation_type: 'sum'
+                    })
+                });
+
+                const data = await response.json();
+                console.log('Aggregation response:', data);
+                
+                // Always try to display results, even if there are some errors
+                if (response.ok || response.status === 200) {
+                    displayAggregationResults(data);
+                } else {
+                    showError(data.error || 'Aggregation failed');  
+                }
+            } catch (error) {
+                console.error('Aggregation error:', error);
+                showError('Network error: ' + error.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function displaySearchResults(data) {
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsCount = document.getElementById('results-count');
+            const resultsContent = document.getElementById('results-content');
+
+            resultsCount.textContent = `${data.total_hits} total matches`;
+            
+            let html = '';
+            
+            // Search type badge
+            if (data.search_type) {
+                const info = searchTypeInfo[data.search_type] || searchTypeInfo.keyword;
+                html += `<div class="mb-6 flex gap-2">
+                    <span class="search-type-badge ${info.class}">
+                        <i data-lucide="search" class="w-3 h-3 mr-1"></i>
+                        ${data.search_type} search
+                    </span>`;
+                
+                if (data.use_rerank) {
+                    html += `<span class="search-type-badge badge-rerank">
+                        <i data-lucide="zap" class="w-3 h-3 mr-1"></i>
+                        reranked
+                    </span>`;
+                }
+                html += '</div>';
+            }
+
+            // Results
+            if (data.results && data.results.length > 0) {
+                html += '<div class="space-y-6">';
+                
+                data.results.forEach((result, index) => {
+                    html += `
+                        <div class="border border-gray-200 rounded-xl p-6 bg-gradient-to-r from-white to-gray-50 hover:shadow-lg transition-all duration-200">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="flex-1">
+                                    <div class="flex items-center gap-3 mb-2">
+                                        <h4 class="font-bold text-xl text-gray-800">${result.product_name || result.region}</h4>
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            ${result.product_category || 'Uncategorized'}
+                                        </span>
+                                    </div>
+                                    ${result.score ? `
+                                        <div class="flex items-center text-sm text-gray-500">
+                                            <i data-lucide="target" class="w-4 h-4 mr-1"></i>
+                                            Match score: ${result.score.toFixed(3)}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                ${result.date ? `
+                                    <div class="text-right">
+                                        <div class="text-sm text-gray-500 flex items-center">
+                                            <i data-lucide="calendar" class="w-4 h-4 mr-1"></i>
+                                            ${new Date(result.date).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                ${result.sales_amount !== undefined ? `
+                                    <div class="bg-green-50 p-3 rounded-lg">
+                                        <div class="flex items-center mb-1">
+                                            <i data-lucide="dollar-sign" class="w-4 h-4 text-green-600 mr-2"></i>
+                                            <div class="text-xs text-green-600 uppercase tracking-wide font-medium">Sales Amount</div>
+                                        </div>
+                                        <div class="text-lg font-bold text-green-700">${(result.sales_amount || result.sales || 0).toLocaleString()}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${result.revenue !== undefined ? `
+                                    <div class="bg-blue-50 p-3 rounded-lg">
+                                        <div class="flex items-center mb-1">
+                                            <i data-lucide="trending-up" class="w-4 h-4 text-blue-600 mr-2"></i>
+                                            <div class="text-xs text-blue-600 uppercase tracking-wide font-medium">Revenue</div>
+                                        </div>
+                                        <div class="text-lg font-bold text-blue-700">${(result.revenue || 0).toLocaleString()}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${result.order_count !== undefined ? `
+                                    <div class="bg-purple-50 p-3 rounded-lg">
+                                        <div class="flex items-center mb-1">
+                                            <i data-lucide="package" class="w-4 h-4 text-purple-600 mr-2"></i>
+                                            <div class="text-xs text-purple-600 uppercase tracking-wide font-medium">Orders</div>
+                                        </div>
+                                        <div class="text-lg font-bold text-purple-700">${result.order_count}</div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${(result.customer_count !== undefined || result.doc_count !== undefined) ? `
+                                    <div class="bg-orange-50 p-3 rounded-lg">
+                                        <div class="flex items-center mb-1">
+                                            <i data-lucide="users" class="w-4 h-4 text-orange-600 mr-2"></i>
+                                            <div class="text-xs text-orange-600 uppercase tracking-wide font-medium">${result.customer_count !== undefined ? 'Customers' : 'Records'}</div>
+                                        </div>
+                                        <div class="text-lg font-bold text-orange-700">${result.customer_count || result.doc_count}</div>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            <div class="flex flex-wrap gap-4 text-sm text-gray-600 mb-3">
+                                ${result.region ? `
+                                    <div class="flex items-center">
+                                        <i data-lucide="map-pin" class="w-4 h-4 text-gray-500 mr-1"></i>
+                                        <strong>Region:</strong> <span class="ml-1">${result.region}</span>
+                                    </div>
+                                ` : ''}
+                                ${result.sales_rep ? `
+                                    <div class="flex items-center">
+                                        <i data-lucide="user" class="w-4 h-4 text-gray-500 mr-1"></i>
+                                        <strong>Sales Rep:</strong> <span class="ml-1">${result.sales_rep}</span>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            
+                            ${result.description ? `
+                                <div class="mt-4 p-3 bg-gray-100 rounded-lg">
+                                    <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Description</div>
+                                    <p class="text-gray-700 text-sm leading-relaxed">${result.description}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+            } else {
+                html += `
+                    <div class="text-center py-12 text-gray-500">
+                        <i data-lucide="search-x" class="w-16 h-16 mx-auto mb-4 text-gray-300"></i>
+                        <h3 class="text-lg font-medium text-gray-700 mb-2">No results found</h3>
+                        <p class="text-gray-600">Try a different search term or search type.</p>
+                    </div>
+                `;
+            }
+
+            resultsContent.innerHTML = html;
+            resultsPanel.classList.remove('hidden');
+            
+            // Re-initialize Lucide icons
+            lucide.createIcons();
+        }
+
+        function displayAggregationResults(data) {
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsCount = document.getElementById('results-count');
+            const resultsContent = document.getElementById('results-content');
+
+            // Handle errors
+            if (data.error) {
+                showError(`Aggregation failed: ${data.error}`);
+                return;
+            }
+
+            resultsCount.textContent = `${data.results.length} groups`;
+            
+            let html = `
+                <div class="mb-4 flex flex-wrap gap-2">
+                    <span class="search-type-badge badge-keyword">
+                        ${data.aggregation_type} of ${data.metric}
+                    </span>
+                    <span class="search-type-badge badge-semantic">
+                        grouped by ${data.group_by}
+                    </span>
+                    ${data.time_range ? `<span class="search-type-badge badge-embedding">${data.time_range}</span>` : ''}
+                    ${data.total_value ? `<span class="search-type-badge badge-hybrid">Total: ${data.total_value.toLocaleString()}</span>` : ''}
+                </div>
+            `;
+
+            // Check if we have results
+            if (!data.results || data.results.length === 0) {
+                html += `
+                    <div class="text-center py-8 text-gray-500">
+                        <i data-lucide="bar-chart" class="w-12 h-12 mx-auto mb-4 text-gray-400"></i>
+                        <p>No data found for this aggregation.</p>
+                        <p class="text-sm">Try a different time range or grouping.</p>
+                    </div>
+                `;
+            } else {
+                html += '<div class="space-y-3">';
+                
+                data.results.forEach((item, index) => {
+                    const groupValue = item[data.group_by];
+                    const metricValue = item[data.metric];
+                    const percentage = item.percentage || 0;
+                    const average = item.average || 0;
+                    
+                    // Color coding for top performers
+                    let borderClass = "border-gray-200";
+                    let bgClass = "bg-white";
+                    if (index === 0) {
+                        borderClass = "border-green-300 bg-green-50";
+                    } else if (index === 1) {
+                        borderClass = "border-blue-300 bg-blue-50";
+                    } else if (index === 2) {
+                        borderClass = "border-orange-300 bg-orange-50";
+                    }
+                    
+                    html += `
+                        <div class="flex justify-between items-center p-4 border ${borderClass} rounded-lg">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    ${index < 3 ? `<span class="text-xs font-bold px-2 py-1 rounded-full ${index === 0 ? 'bg-green-100 text-green-800' : index === 1 ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'}">#${index + 1}</span>` : ''}
+                                    <div class="font-medium text-gray-800">${groupValue}</div>
+                                </div>
+                                ${percentage > 0 ? `<div class="text-sm text-gray-600 mt-1">${percentage}% of total</div>` : ''}
+                            </div>
+                            <div class="text-right">
+                                <div class="font-semibold text-lg text-gray-900">${metricValue.toLocaleString()}</div>
+                                <div class="text-sm text-gray-600">${item.doc_count} records</div>
+                                ${average > 0 && average !== metricValue ? `<div class="text-xs text-gray-500">Avg: ${average.toLocaleString()}</div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div>';
+            }
+
+            resultsContent.innerHTML = html;
+            resultsPanel.classList.remove('hidden');
+            
+            // Re-initialize Lucide icons
+            lucide.createIcons();
+        }
+
+        function setClaudeQuery(query) {
+            document.getElementById('claude-question').value = query;
+        }
+
+        function handleClaudeKeyPress(event) {
+            if (event.key === 'Enter' && event.ctrlKey) {
+                askClaude();
+            }
+        }
+
+        async function askClaude() {
+            const question = document.getElementById('claude-question').value.trim();
+            if (!question || isLoading) return;
+
+            setLoading(true, 'claude-button');
+
+            try {
+                console.log(`Asking Claude: "${question}"`);
+                
+                const response = await fetch('/api/claude-qa', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        question: question,
+                        include_search: true
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displayClaudeResponse(data);
+                } else {
+                    showError(data.error || 'Claude Q&A failed');
+                }
+            } catch (error) {
+                console.error('Claude Q&A error:', error);
+                showError('Network error: ' + error.message);
+            } finally {
+                setLoading(false, 'claude-button');
+            }
+        }
+
+        async function smartSearch() {
+            const query = document.getElementById('claude-question').value.trim();
+            if (!query || isLoading) return;
+
+            setLoading(true, 'smart-search-button');
+
+            try {
+                console.log(`Smart search: "${query}"`);
+                
+                const response = await fetch('/api/smart-search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        query: query
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    displaySmartSearchResponse(data);
+                } else {
+                    showError(data.error || 'Smart search failed');
+                }
+            } catch (error) {
+                console.error('Smart search error:', error);
+                showError('Network error: ' + error.message);
+            } finally {
+                setLoading(false, 'smart-search-button');
+            }
+        }
+
+        function displayClaudeResponse(data) {
+            console.log('Displaying Claude response:', data);
+            
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsCount = document.getElementById('results-count');
+            const resultsContent = document.getElementById('results-content');
+
+            resultsCount.textContent = `Claude Q&A Response`;
+            
+            let html = `
+                <div class="space-y-6">
+                    <div class="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                        <div class="flex items-start">
+                            <i data-lucide="brain" class="w-6 h-6 text-purple-600 mr-3 mt-1 flex-shrink-0"></i>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-purple-900 mb-3">💬 Question:</h4>
+                                <div class="bg-white p-3 rounded-lg mb-4 border border-purple-200">
+                                    <p class="text-gray-800 italic">"${data.question}"</p>
+                                </div>
+                                
+                                <h4 class="font-semibold text-purple-900 mb-3">🧠 Claude's Analysis:</h4>
+                                <div class="bg-white p-4 rounded-lg border border-purple-200">
+                                    <div class="text-gray-800 leading-relaxed whitespace-pre-wrap">${data.answer}</div>
+                                </div>
+                                
+                                ${data.context_summary ? `
+                                    <div class="mt-4 p-3 bg-purple-100 rounded-lg">
+                                        <div class="text-sm text-purple-800">
+                                            <i data-lucide="info" class="w-4 h-4 inline mr-1"></i>
+                                            <strong>Context:</strong> ${data.context_summary}
+                                        </div>
+                                    </div>
+                                ` : ''}
+                                
+                                ${data.suggestion ? `
+                                    <div class="mt-4 p-3 bg-blue-100 rounded-lg">
+                                        <h5 class="font-medium text-blue-900 mb-1">💡 Suggestion:</h5>
+                                        <p class="text-sm text-blue-700">${data.suggestion}</p>
+                                    </div>
+                                ` : ''}
+                                
+                                ${data.note ? `
+                                    <div class="mt-4 p-3 bg-yellow-100 rounded-lg">
+                                        <h5 class="font-medium text-yellow-800 mb-1">ℹ️ Note:</h5>
+                                        <p class="text-sm text-yellow-700">${data.note}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+            `;
+
+            // Show context data if available with comprehensive fields
+            if (data.context_data && data.context_data.results && data.context_data.results.length > 0) {
+                html += `
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                            <i data-lucide="database" class="w-5 h-5 mr-2"></i>
+                            📊 Supporting Data (${data.context_data.results.length} records analyzed)
+                        </h4>
+                        <div class="space-y-4">
+                `;
+                
+                data.context_data.results.slice(0, 5).forEach((result, index) => {
+                    html += `
+                        <div class="border border-gray-200 rounded-lg p-5 bg-gradient-to-r from-gray-50 to-white hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-start mb-4">
+                                <div>
+                                    <h5 class="font-semibold text-lg text-gray-800">${result.product_name || 'Unknown Product'}</h5>
+                                    <div class="text-sm text-gray-600 mt-1">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                            ${result.product_category || 'Uncategorized'}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-sm text-gray-500">Match Score</div>
+                                    <div class="font-semibold text-blue-600">${result.score ? result.score.toFixed(3) : 'N/A'}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                                <div class="flex items-center">
+                                    <i data-lucide="map-pin" class="w-4 h-4 text-blue-600 mr-2"></i>
+                                    <div>
+                                        <div class="text-xs text-gray-500 uppercase tracking-wide">Region</div>
+                                        <div class="font-medium text-gray-800">${result.region || 'N/A'}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center">
+                                    <i data-lucide="user" class="w-4 h-4 text-green-600 mr-2"></i>
+                                    <div>
+                                        <div class="text-xs text-gray-500 uppercase tracking-wide">Sales Rep</div>
+                                        <div class="font-medium text-gray-800">${result.sales_rep || 'N/A'}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center">
+                                    <i data-lucide="calendar" class="w-4 h-4 text-purple-600 mr-2"></i>
+                                    <div>
+                                        <div class="text-xs text-gray-500 uppercase tracking-wide">Date</div>
+                                        <div class="font-medium text-gray-800">${result.date ? new Date(result.date).toLocaleDateString() : 'N/A'}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex items-center">
+                                    <i data-lucide="users" class="w-4 h-4 text-orange-600 mr-2"></i>
+                                    <div>
+                                        <div class="text-xs text-gray-500 uppercase tracking-wide">Customers</div>
+                                        <div class="font-medium text-gray-800">${result.customer_count || 0}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 p-3 bg-gray-50 rounded-lg">
+                                <div class="text-center">
+                                    <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Sales Amount</div>
+                                    <div class="text-lg font-bold text-green-600">${(result.sales_amount || 0).toLocaleString()}</div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Revenue</div>
+                                    <div class="text-lg font-bold text-blue-600">${(result.revenue || 0).toLocaleString()}</div>
+                                </div>
+                                
+                                <div class="text-center">
+                                    <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Order Count</div>
+                                    <div class="text-lg font-bold text-purple-600">${result.order_count || 0}</div>
+                                </div>
+                            </div>
+                            
+                            ${result.description ? `
+                                <div class="mt-3 p-3 bg-blue-50 rounded-lg">
+                                    <div class="text-xs text-gray-500 uppercase tracking-wide mb-1">Description</div>
+                                    <p class="text-sm text-gray-700">${result.description}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+            }
+
+            html += '</div>';
+
+            resultsContent.innerHTML = html;
+            resultsPanel.classList.remove('hidden');
+            
+            // Re-initialize Lucide icons
+            lucide.createIcons();
+        }
+
+        function displaySmartSearchResponse(data) {
+            console.log('Displaying smart search response:', data);
+            
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsCount = document.getElementById('results-count');
+            const resultsContent = document.getElementById('results-content');
+
+            resultsCount.textContent = `Smart Search Results`;
+            
+            let html = `
+                <div class="space-y-6">
+                    <div class="bg-green-50 border border-green-200 rounded-lg p-6">
+                        <div class="flex items-start">
+                            <i data-lucide="sparkles" class="w-6 h-6 text-green-600 mr-3 mt-1"></i>
+                            <div class="flex-1">
+                                <h4 class="font-semibold text-green-900 mb-2">Query:</h4>
+                                <p class="text-green-800 mb-4">"${data.query}"</p>
+                                
+                                <h4 class="font-semibold text-green-900 mb-2">AI Analysis:</h4>
+                                <p class="text-green-800 mb-4">${data.analysis.summary}</p>
+                                
+                                <div class="grid md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h5 class="font-medium text-green-900 mb-2">💡 Insights:</h5>
+                                        <ul class="text-sm text-green-700 space-y-1">
+                                            ${data.analysis.insights.map(insight => `<li>• ${insight}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h5 class="font-medium text-green-900 mb-2">📋 Recommendations:</h5>
+                                        <ul class="text-sm text-green-700 space-y-1">
+                                            ${data.analysis.recommendations.map(rec => `<li>• ${rec}</li>`).join('')}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+            `;
+
+            // Show search results if available
+            if (data.search_results && data.search_results.length > 0) {
+                html += `
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4">🔍 Search Results (${data.search_results.length} found)</h4>
+                        <div class="space-y-3">
+                `;
+                
+                data.search_results.slice(0, 5).forEach((result, index) => {
+                    html += `
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="font-medium text-gray-800">${result.product_name || 'N/A'}</div>
+                                <div class="text-sm text-gray-600">Score: ${result.score}</div>
+                            </div>
+                            <div class="grid grid-cols-4 gap-4 text-sm">
+                                <div><strong>Region:</strong> ${result.region || 'N/A'}</div>
+                                <div><strong>Sales:</strong> ${(result.sales_amount || 0).toLocaleString()}</div>
+                                <div><strong>Rep:</strong> ${result.sales_rep || 'N/A'}</div>
+                                <div><strong>Orders:</strong> ${result.order_count || 0}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += '</div></div>';
+            }
+
+            // Show aggregations if available
+            if (data.aggregations && data.aggregations.length > 0) {
+                html += `
+                    <div>
+                        <h4 class="text-lg font-semibold text-gray-800 mb-4">📊 Key Metrics</h4>
+                        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                `;
+                
+                data.aggregations.forEach((agg, index) => {
+                    if (agg.results && agg.results.length > 0) {
+                        const topResult = agg.results[0];
+                        html += `
+                            <div class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                <h5 class="font-medium text-gray-800 mb-2">${agg.metric} by ${agg.group_by}</h5>
+                                <div class="text-sm text-gray-600">
+                                    <div><strong>Top:</strong> ${topResult[agg.group_by]}</div>
+                                    <div><strong>Value:</strong> ${topResult[agg.metric].toLocaleString()}</div>
+                                    <div><strong>Total:</strong> ${agg.total_value.toLocaleString()}</div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                
+                html += '</div></div>';
+            }
+
+            html += '</div>';
+
+            resultsContent.innerHTML = html;
+            resultsPanel.classList.remove('hidden');
+            
+            // Re-initialize Lucide icons
+            lucide.createIcons();
+        }
+
+        function setLoading(loading, buttonId = 'search-button') {
+            isLoading = loading;
+            
+            const button = document.getElementById('search-button');
+            
+            if (loading) {
+                button.disabled = true;
+                button.innerHTML = '<div class="loading-spinner"></div>';
+            } else {
+                button.disabled = false;
+                button.innerHTML = '<i data-lucide="search" class="w-4 h-4"></i>';
+                lucide.createIcons();
+            }
+        }
+
+        function showError(message) {
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsContent = document.getElementById('results-content');
+            
+            // Provide more helpful error messages
+            let helpText = "";
+            if (message.includes("search_phase_execution_exception")) {
+                helpText = "This usually means the AI search fields aren't available. Try using Keyword search instead.";
+            } else if (message.includes("timeout")) {
+                helpText = "The search took too long. Try a simpler query or use Keyword search.";
+            } else if (message.includes("inference")) {
+                helpText = "AI inference endpoints aren't available. Keyword search will work normally.";
+            }
+            
+            resultsContent.innerHTML = `
+                <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div class="flex items-start">
+                        <i data-lucide="alert-circle" class="w-5 h-5 text-red-600 mr-2 mt-0.5"></i>
+                        <div>
+                            <span class="text-red-800 font-medium">Error:</span>
+                            <span class="text-red-700 ml-1">${message}</span>
+                            ${helpText ? `<p class="text-red-600 text-sm mt-2">${helpText}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            resultsPanel.classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        // Initialize search type info on page load
+        updateSearchTypeInfo();
+
+        // Test Claude features function
+        async function testClaudeFeatures() {
+            console.log('Testing Claude features...');
+            
+            try {
+                // Test 1: MCP Tools
+                const mcpResponse = await fetch('/api/mcp-tools');
+                const mcpData = await mcpResponse.json();
+                
+                // Test 2: Claude Q&A
+                const qaResponse = await fetch('/api/claude-qa', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        question: "What can you tell me about our business data?",
+                        include_search: false
+                    })
+                });
+                const qaData = await qaResponse.json();
+                
+                // Test 3: Smart Search
+                const smartResponse = await fetch('/api/smart-search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        query: "software sales"
+                    })
+                });
+                const smartData = await smartResponse.json();
+                
+                console.log('Claude features test results:', { mcpData, qaData, smartData });
+                
+                // Display the results
+                const resultsPanel = document.getElementById('results-panel');
+                const resultsContent = document.getElementById('results-content');
+                
+                let html = `
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold">🧠 Claude Features Test Results</h4>
+                        
+                        <div class="grid md:grid-cols-3 gap-4">
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h5 class="font-medium mb-2">🔗 MCP Tools</h5>
+                                <div class="text-sm ${mcpResponse.ok ? 'text-green-600' : 'text-red-600'}">
+                                    ${mcpResponse.ok ? `✅ ${mcpData.tools ? mcpData.tools.length : 0} tools available` : '❌ Failed'}
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h5 class="font-medium mb-2">🧠 Claude Q&A</h5>
+                                <div class="text-sm ${qaResponse.ok ? 'text-green-600' : 'text-red-600'}">
+                                    ${qaResponse.ok ? '✅ Q&A endpoint working' : '❌ Failed'}
+                                </div>
+                            </div>
+                            
+                            <div class="border border-gray-200 rounded-lg p-4">
+                                <h5 class="font-medium mb-2">✨ Smart Search</h5>
+                                <div class="text-sm ${smartResponse.ok ? 'text-green-600' : 'text-red-600'}">
+                                    ${smartResponse.ok ? '✅ Smart search working' : '❌ Failed'}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <h5 class="font-medium text-blue-800 mb-2">🎯 How to Use Claude Features:</h5>
+                            <ul class="text-sm text-blue-700 space-y-1">
+                                <li>• Click "Ask Claude (MCP)" tab above</li>
+                                <li>• Type natural language questions about your business</li>
+                                <li>• Use "Ask Claude" for Q&A with context search</li>
+                                <li>• Use "Smart Search" for comprehensive analysis</li>
+                                <li>• Connect Claude Desktop for full AI assistant integration</li>
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                
+                resultsContent.innerHTML = html;
+                resultsPanel.classList.remove('hidden');
+                
+                // Re-initialize Lucide icons
+                lucide.createIcons();
+                
+            } catch (error) {
+                console.error('Claude features test failed:', error);
+                showError('Claude features test failed: ' + error.message);
+            }
+        }
+
+        // Test MCP connection function
+        async function testMCPConnection() {
+            console.log('Testing MCP connection...');
+            
+            try {
+                const response = await fetch('/api/mcp-tools');
+                const data = await response.json();
+                
+                console.log('MCP Tools response:', data);
+                
+                // Display the MCP tools and status
+                const resultsPanel = document.getElementById('results-panel');
+                const resultsContent = document.getElementById('results-content');
+                
+                let html = `
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold">🔗 MCP Connection Test</h4>
+                        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                            <div class="flex items-center mb-3">
+                                <i data-lucide="link" class="w-5 h-5 text-blue-600 mr-2"></i>
+                                <span class="font-medium text-blue-800">MCP Server Status</span>
+                            </div>
+                `;
+                
+                if (response.ok && data.tools) {
+                    html += `
+                        <div class="text-green-600 font-medium mb-2">✅ MCP Server Connected</div>
+                        <div class="text-sm text-blue-700">
+                            <strong>Available Tools:</strong> ${data.tools.length}<br>
+                            <strong>Architecture:</strong> Browser → Flask → MCP Server → Elasticsearch
+                        </div>
+                        <div class="mt-3">
+                            <strong class="text-blue-800">MCP Tools:</strong>
+                            <ul class="list-disc list-inside mt-1 text-sm">
+                    `;
+                    
+                    data.tools.forEach(tool => {
+                        html += `<li>${tool.name}: ${tool.description}</li>`;
+                    });
+                    
+                    html += `
+                            </ul>
+                        </div>
+                    `;
+                } else {
+                    html += `
+                        <div class="text-red-600 font-medium">❌ MCP Connection Failed</div>
+                        <div class="text-sm text-red-700">Error: ${data.error || 'Unknown error'}</div>
+                    `;
+                }
+                
+                html += `
+                        </div>
+                        <div class="text-xs text-gray-600">
+                            <strong>What is MCP?</strong> Model Context Protocol enables AI assistants to securely access your business data through standardized tools.
+                        </div>
+                    </div>
+                `;
+                
+                resultsContent.innerHTML = html;
+                resultsPanel.classList.remove('hidden');
+                
+                // Re-initialize Lucide icons
+                lucide.createIcons();
+                
+            } catch (error) {
+                console.error('MCP connection test failed:', error);
+                showError('MCP connection test failed: ' + error.message);
+            }
+        }
+
+        // Test aggregation function
+        async function testAggregationDirectly() {
+            console.log('Testing aggregation directly...');
+            
+            try {
+                const response = await fetch('/api/test-agg');
+                const data = await response.json();
+                
+                console.log('Test aggregation response:', data);
+                
+                // Display the raw result
+                const resultsPanel = document.getElementById('results-panel');
+                const resultsContent = document.getElementById('results-content');
+                
+                resultsContent.innerHTML = `
+                    <div class="space-y-4">
+                        <h4 class="text-lg font-semibold">Aggregation Test Results</h4>
+                        <div class="bg-gray-100 p-4 rounded text-sm">
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                        ${data.has_results ? 
+                            `<div class="text-green-600 font-medium">✅ Aggregation working: ${data.raw_result.results.length} results found</div>` :
+                            `<div class="text-red-600 font-medium">❌ No aggregation results found</div>`
+                        }
+                    </div>
+                `;
+                
+                resultsPanel.classList.remove('hidden');
+                
+            } catch (error) {
+                console.error('Test aggregation failed:', error);
+                showError('Test aggregation failed: ' + error.message);
+            }
+        }
+
+        // Test all search types function
+        async function testSearch() {
+            const testQuery = "software";
+            const searchTypes = ["keyword", "semantic", "embedding", "hybrid", "rerank"];
+            
+            let results = [];
+            
+            for (const searchType of searchTypes) {
+                try {
+                    const response = await fetch('/api/search', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            query: testQuery,
+                            search_type: searchType,
+                            size: 3
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    results.push({
+                        type: searchType,
+                        status: response.ok ? "✅ Working" : "❌ Failed",
+                        hits: response.ok ? data.total_hits : 0,
+                        error: response.ok ? null : data.error
+                    });
+                } catch (error) {
+                    results.push({
+                        type: searchType,
+                        status: "❌ Failed",
+                        hits: 0,
+                        error: error.message
+                    });
+                }
+            }
+            
+            // Display results
+            const resultsPanel = document.getElementById('results-panel');
+            const resultsContent = document.getElementById('results-content');
+            
+            let html = `<div class="space-y-3">
+                <h4 class="text-lg font-semibold">Search Type Test Results</h4>`;
+            
+            results.forEach(result => {
+                html += `
+                    <div class="flex justify-between items-center p-3 border border-gray-200 rounded">
+                        <div>
+                            <span class="font-medium">${result.type}</span>
+                            ${result.error ? `<p class="text-xs text-red-600">${result.error}</p>` : ''}
+                        </div>
+                        <div class="text-right">
+                            <div>${result.status}</div>
+                            ${result.hits > 0 ? `<div class="text-sm text-gray-600">${result.hits} hits</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            resultsContent.innerHTML = html;
+            resultsPanel.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
